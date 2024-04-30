@@ -1,0 +1,15 @@
+asyncio
+youtubesearchpython 
+pytube
+moviepy.editor
+os
+cv2
+requests
+subprocess
+interactor
+states
+aiogram
+aiogram.types
+aiogram.dispatcher
+aiogram.contrib.fsm_storage.memory
+re
