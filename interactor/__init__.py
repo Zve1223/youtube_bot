@@ -173,7 +173,7 @@ async def download_video(video) -> tuple[str, int]:
 async def download_video_clip(video, start: int, end: int) -> str:
     print(f'--Начало скачивания и обрезки видео "{video["title"]}"')
 
-    title = video['id'] + '_' + str(start) + '-' + str(end) + '.mp4'
+    title = f'{video["id"]}_{start}-{end}.mp4'
     filepath = os.path.join(video_clip_path, title)
 
     while os.path.exists(filepath):
@@ -220,7 +220,7 @@ async def download_audio(video) -> None:
 async def download_audio_clip(video, start: int, end: int) -> str:
     print(f'--Начало скачивания и обрезки аудио из видео "{video["title"]}"')
 
-    title = video['id'] + '_' + str(start) + '-' + str(end) + '.mp3'
+    title = f'{video["id"]}_{start}-{end}.mp3'
     filepath = os.path.join(audio_clip_path, title)
 
     while os.path.exists(filepath):
@@ -247,7 +247,7 @@ async def download_audio_clip(video, start: int, end: int) -> str:
 async def download_frame(video, frame_time: int) -> str:
     print(f'--Начало скачивания кадра видео "{video["title"]}"')
 
-    title = video['id'] + '_' + str(frame_time) + '.png'
+    title = f'{video["id"]}_{frame_time}.png'
     filepath = os.path.join(frame_path, title)
 
     while os.path.exists(filepath):

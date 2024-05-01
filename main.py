@@ -10,6 +10,14 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 import re
 
+from data import db_session
+from data.__all_models import *
+
+
+db_session.global_init('db.sqlite')
+session = db_session.create_session()
+
+
 MEMORY_STORAGE = MemoryStorage()
 
 TOKEN = '6187836302:AAE7-3Eue2LrEZYHK89FzaUvHTqy7FRB3bQ'
@@ -96,7 +104,8 @@ async def is_admin(user_id: int) -> bool:
 
 # Вспомогательная функция для вычисления способа поиска видео (ссылка/название)
 async def get_video(message: str) -> dict | tuple[list, str]:
-    if '/'.join(message.split('/')[:3]) in ['https://www.youtube.com', 'https://youtu.be', 'https://youtube.com']:
+    m = message.lstrip('https://').split('/')
+    if m[0] in ['www.youtube.com', 'youtu.be', 'youtube.com']:
         video = await link_search(message)
         return video
     else:
@@ -125,6 +134,12 @@ async def is_correct(message: Message, limit: int) -> bool:
 
 
 async def send_video(message: Message, video: dict) -> None:
+    result = session.query(Video).filter(Video.yt_id == video['id']).first()
+    if result is not None:
+        await message.answer_video(video=result.tg_id)
+        await message.answer(f'Видео с разрешением {result.res}p')
+        return
+
     temp = await message.answer('Начало скачивания видео...')
 
     try:
@@ -139,9 +154,11 @@ async def send_video(message: Message, video: dict) -> None:
         await message.answer('Что-то пошло не так...')
         return
 
-    await message.answer_video(file)
+    video_message = await message.answer_video(file)
     await temp.delete()
     await message.answer(result)
+    session.add(Video.create(video['id'], video_message.video.file_id, int(result[-4:-1])))
+    session.commit()
 
     os.remove(filepath)
 
@@ -197,27 +214,38 @@ async def video_get_by_title(message: Message, state: FSMContext) -> None:
 
 
 async def send_v_clip(message: Message, m: list) -> None:
+    video, start, end = m
+    start = to_ms(*map(int, start.split(':')))
+    end = to_ms(*map(int, end.split(':')))
+
+    result = session.query(VideoClip).filter(
+        (VideoClip.yt_id == video['id']) & (VideoClip.start == start) & (VideoClip.end == end)).first()
+
+    if result is not None:
+        await message.answer_video(video=result.tg_id)
+        await message.answer(f'Видео с разрешением {result.res}p')
+        return
+
     temp = await message.answer('Начало скачивания видео-клипа...')
 
-    video, start, end = m
-
     try:
-        start = to_ms(*map(int, start.split(':')))
-        end = to_ms(*map(int, end.split(':')))
         result = await download_video_clip(video, start, end)
 
-        filename = video['id'] + '_' + str(start) + '-' + str(end) + '.mp4'
+        filename = f'{video["id"]}_{start}-{end}.mp4'
         filepath = os.path.join(video_clip_path, filename)
-        filename = video['title'] + '_' + str(start) + '-' + str(end) + '.mp4'
+        filename = f'{video["title"]}_{start}-{end}.mp4'
         file = InputFile(filepath, filename=filename)
     except ValueError:
         await temp.delete()
         await message.answer('Что-то пошло не так...')
         return
 
-    await message.answer_video(file)
+    v_clip_message = await message.answer_video(file)
     await temp.delete()
     await message.answer(result)
+
+    session.add(VideoClip.create(video['id'], v_clip_message.video.file_id, start, end, int(result[-4:-1])))
+    session.commit()
 
     os.remove(filepath)
     os.remove(os.path.join(video_path, video['id'] + '.mp4'))
@@ -303,6 +331,11 @@ async def v_clip_get_time_to(message: Message, state: FSMContext) -> None:
 
 
 async def send_audio(message: Message, video: dict) -> None:
+    result = session.query(Audio).filter(Audio.yt_id == video['id']).first()
+    if result is not None:
+        await message.answer_audio(audio=result.tg_id)
+        return
+
     temp = await message.answer('Начало скачивания аудио...')
 
     try:
@@ -317,8 +350,11 @@ async def send_audio(message: Message, video: dict) -> None:
         await message.answer('Что-то пошло не так...')
         return
 
-    await message.answer_audio(file)
+    audio_message = await message.answer_audio(file)
     await temp.delete()
+
+    session.add(Audio.create(video['id'], audio_message.audio.file_id))
+    session.commit()
 
     os.remove(filepath)
     os.remove(os.path.join(video_path, video['id'] + '.mp4'))
@@ -374,26 +410,36 @@ async def audio_get_by_title(message: Message, state: FSMContext) -> None:
 
 
 async def send_a_clip(message: Message, m: list) -> None:
+    video, start, end = m
+    start = to_ms(*map(int, start.split(':')))
+    end = to_ms(*map(int, end.split(':')))
+
+    result = session.query(AudioClip).filter(
+        (AudioClip.yt_id == video['id']) & (AudioClip.start == start) & (AudioClip.end == end)).first()
+
+    if result is not None:
+        await message.answer_audio(audio=result.tg_id)
+        return
+
     temp = await message.answer('Начало скачивания аудио-клипа...')
 
-    video, start, end = m
-
     try:
-        start = to_ms(*map(int, start.split(':')))
-        end = to_ms(*map(int, end.split(':')))
         await download_audio_clip(video, start, end)
 
-        filename = video['id'] + '_' + str(start) + '-' + str(end) + '.mp3'
+        filename = f'{video["id"]}_{start}-{end}.mp3'
         filepath = os.path.join(audio_clip_path, filename)
-        filename = video['title'] + '_' + str(start) + '-' + str(end) + '.mp3'
+        filename = f'{video["title"]}_{start}-{end}.mp3'
         file = InputFile(filepath, filename=filename)
     except ValueError:
         await temp.delete()
         await message.answer('Что-то пошло не так...')
         return
 
-    await message.answer_audio(file)
+    a_clip_message = await message.answer_audio(file)
     await temp.delete()
+
+    session.add(AudioClip.create(video['id'], a_clip_message.audio.file_id, start, end))
+    session.commit()
 
     os.remove(filepath)
     os.remove(os.path.join(video_path, video['id'] + '.mp4'))
@@ -480,12 +526,19 @@ async def a_clip_get_time_to(message: Message, state: FSMContext) -> None:
 
 
 async def send_frame(message: Message, m: list) -> None:
+    video, frame_time = m
+    frame_time = to_ms(*map(int, frame_time.split(':')))
+
+    result = session.query(Frame).filter((Frame.yt_id == video['id']) & (Frame.time == frame_time)).first()
+
+    if result is not None:
+        await message.answer_photo(photo=result.tg_id)
+        await message.answer(f'Кадр с разрешением {result.res}p')
+        return
+
     temp = await message.answer('Начало скачивания кадра...')
 
-    video, frame_time = m
-
     try:
-        frame_time = to_ms(*map(int, frame_time.split(':')))
         result = await download_frame(video, frame_time)
 
         filename = video['id'] + '_' + str(frame_time) + '.png'
@@ -497,9 +550,12 @@ async def send_frame(message: Message, m: list) -> None:
         await message.answer('Что-то пошло не так...')
         return
 
-    await message.answer_photo(file)
+    frame_message = await message.answer_photo(file)
     await temp.delete()
     await message.answer(result)
+
+    session.add(Frame.create(video['id'], frame_message.photo[0].file_id, frame_time, int(result.strip()[-4:-1])))
+    session.commit()
 
     os.remove(filepath)
     os.remove(os.path.join(video_path, video['id'] + '.mp4'))
