@@ -109,6 +109,7 @@ async def get_video(message: str) -> dict | tuple[list, str]:
         video = await link_search(message)
         return video
     else:
+        assert ValueError
         results, table = await title_search(message)
         return results, table
 
@@ -165,7 +166,7 @@ async def send_video(message: Message, video: dict) -> None:
 
 async def video_command(message: Message) -> None:
     await VideoSteps.GET_LINK.set()
-    await message.answer('Введите ссылку или название видео',
+    await message.answer('Введите ссылку',  # или название видео',
                          reply_markup=back_keyboard)
 
 
